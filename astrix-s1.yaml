@@ -1,734 +1,265 @@
-substitutions:
-  device_name: spider-farmer-bridge
-  friendly_name: Spider Farmer Bridge
-  # GGS BLE address from nRF Connect (lowercase, colon-separated). Replace the placeholder.
-  ggs_ble_mac: "aa:bb:cc:dd:ee:ff"
-  # GATT UUIDs (override if your controller firmware differs).
-  ggs_service_uuid: "000000ff-0000-1000-8000-00805f9b34fb"
-  ggs_notify_char_uuid: "0000ff01-0000-1000-8000-00805f9b34fb"
-  ggs_write_char_uuid: "0000ff02-0000-1000-8000-00805f9b34fb"
-  # ESPHome SoC id (must match your module). Examples: esp32, esp32c3, esp32s3, esp32c2, esp32c6, ...
-  # See https://esphome.io/components/esp32.html#variants
-  # Needs Wi-Fi + BLE (e.g. not esp32s2, which has no Bluetooth).
-  esphome_variant: esp32
-  # Must match the module: 2MB, 4MB, 8MB, 16MB, or 32MB (4MB is common; many C3 devkits are 4MB).
-  flash_size: 4MB
-  # Proven API profile for this bridge; align with `api` defaults in the ESPHome docs to compare.
-  api_batch_delay: 1s
-  api_max_send_queue: "24"
-  api_listen_backlog: "6"
-  api_reboot_timeout: 30min
-  # BLE connect attempt cap (aligns with long GATT / coexistence; default in esp32_ble is 20s).
-  ble_connection_timeout: 60s
-  # Disconnected: periodic scan to find the GGS. Connected: no extra scan.
-  ggs_scan_retry_interval: 20s
-  # getDevSta refresh when GGS and HA are both connected.
-  ggs_status_interval: 30s
-
 esphome:
-  name: ${device_name}
-  friendly_name: ${friendly_name}
-  min_version: 2024.6.0
-  on_boot:
-    # ble_client switch may restore OFF from prefs; ensure GGS link is enabled after reboot.
-    - priority: -10
-      then:
-        - switch.turn_on: ggs_connect_switch
-  project:
-    name: local.spider_farmer_ggs_ble
-    version: "0.5.1"
+  name: astrix-s1
+  friendly_name: Astrix S1
+  name_add_mac_suffix: True
+  platformio_options:
+    board_build.f_flash: 40000000L
+    board_build.flash_mode: dio
+    board_build.flash_size: 4MB
 
-# `variant` (+ `flash_size`) is enough to build. Add `board: <id>` only if you need a devkit’s pin map.
 esp32:
-  variant: ${esphome_variant}
-  flash_size: ${flash_size}
+  board: esp32-c3-devkitm-1
+  variant: ESP32C3
   framework:
     type: esp-idf
-
+                                                
+# Enable logging
 logger:
-  level: INFO
+  logs: 
+    ld2410: WARN
+
+# Enable Home Assistant API
+api:
+
 
 ota:
   - platform: esphome
 
-api:
-  # Shipped values below match a stable profile for Wi-Fi + BLE; see substitutions to adjust.
-  batch_delay: ${api_batch_delay}
-  max_send_queue: ${api_max_send_queue}
-  listen_backlog: ${api_listen_backlog}
-  reboot_timeout: ${api_reboot_timeout}
-  on_client_connected:
-    - logger.log:
-        format: "API client connected: %s from %s"
-        args: ["client_info.c_str()", "client_address.c_str()"]
-  on_client_disconnected:
-    - logger.log:
-        format: "API client disconnected: %s from %s"
-        args: ["client_info.c_str()", "client_address.c_str()"]
-
-esp32_ble:
-  connection_timeout: ${ble_connection_timeout}
-
 wifi:
-  ssid: !secret wifi_ssid
-  password: !secret wifi_password
-  power_save_mode: none
-  fast_connect: true
+  output_power: 15
+  
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    password: "AstriXS1"
 
-esp32_ble_tracker:
-  id: ggs_ble_tracker
-  # When Wi-Fi is used, keep coexistence enabled (ESPHome default; set explicitly for clarity).
-  software_coexistence: true
-  scan_parameters:
-    # Passive, short window: light scan duty when the tracker is started (e.g. while GGS is disconnected).
-    active: false
-    continuous: false
-    interval: 800ms
-    window: 20ms
+captive_portal:
 
-ble_client:
-  - mac_address: ${ggs_ble_mac}
-    id: ggs_client
-    on_connect:
-      then:
-        - logger.log: "Connected to Spider Farmer GGS BLE device"
-        - delay: 500ms
-        - script.execute: ggs_pull_status
-    on_disconnect:
-      then:
-        - logger.log: "Disconnected from Spider Farmer GGS BLE device"
+ld2410:
+  id: ld2410_radar
+  
+uart:
+  tx_pin: GPIO21
+  rx_pin: GPIO20
+  baud_rate: 256000
 
-script:
-  - id: ggs_pull_status
-    mode: queued
-    then:
-      - ble_client.ble_write:
-          id: ggs_client
-          service_uuid: ${ggs_service_uuid}
-          characteristic_uuid: ${ggs_write_char_uuid}
-          value: !lambda |-
-            std::string payload = "{\"method\":\"getDevSta\"}";
-            return std::vector<uint8_t>(payload.begin(), payload.end());
+number:
+  - platform: ld2410
+    timeout:
+      name: Radar Timeout
+    max_move_distance_gate:
+      name: Radar Max Move Distance
+    max_still_distance_gate:
+      name: Radar Max Still Distance
+    g0:
+      move_threshold:
+        name: g0 move threshold
+      still_threshold:
+        name: g0 still threshold
+    g1:
+      move_threshold:
+        name: g1 move threshold
+      still_threshold:
+        name: g1 still threshold
+    g2:
+      move_threshold:
+        name: g2 move threshold
+      still_threshold:
+        name: g2 still threshold
+    g3:
+      move_threshold:
+        name: g3 move threshold
+      still_threshold:
+        name: g3 still threshold
+    g4:
+      move_threshold:
+        name: g4 move threshold
+      still_threshold:
+        name: g4 still threshold
+    g5:
+      move_threshold:
+        name: g5 move threshold
+      still_threshold:
+        name: g5 still threshold
+    g6:
+      move_threshold:
+        name: g6 move threshold
+      still_threshold:
+        name: g6 still threshold
+    g7:
+      move_threshold:
+        name: g7 move threshold
+      still_threshold:
+        name: g7 still threshold
+    g8:
+      move_threshold:
+        name: g8 move threshold
+      still_threshold:
+        name: g8 still threshold
 
-interval:
-  # Scan retry while disconnected.
-  - interval: ${ggs_scan_retry_interval}
-    then:
-      - if:
-          condition:
-            and:
-              - switch.is_on: ggs_connect_switch
-              - lambda: 'return !id(ggs_client).connected();'
-          then:
-            - esp32_ble_tracker.start_scan:
-                id: ggs_ble_tracker
-                continuous: false
-  # Push last parsed device state to HA (template entities use update_interval: never).
-  - interval: 5s
-    then:
-      - lambda: |-
-          if (id(sf_fan_level) >= 0) {
-            id(sf_fan_level_text).publish_state(to_string(id(sf_fan_level)));
-          }
-          if (id(sf_fan_on) >= 0) {
-            id(sf_fan_bin).publish_state(id(sf_fan_on) == 1);
-          }
-          // Light: only publish on NOTIFY path (avoids re-firing HA logbook every 5s).
-          if (id(sf_light2_level) >= 0) {
-            id(sf_light2_level_text).publish_state(to_string(id(sf_light2_level)) + "%");
-          }
-          if (id(sf_blower_level) >= 0) {
-            id(sf_blower_level_text).publish_state(to_string(id(sf_blower_level)) + "%");
-          }
-          if (id(sf_blower_on) >= 0) {
-            id(sf_blower_bin).publish_state(id(sf_blower_on) == 1);
-          }
-          if (id(sf_humidifier_level) >= 0) {
-            id(sf_humidifier_level_text).publish_state(to_string(id(sf_humidifier_level)));
-          }
-          if (id(sf_humidifier_on) >= 0) {
-            id(sf_humidifier_bin).publish_state(id(sf_humidifier_on) == 1);
-          }
-  # Status pull while HA is connected (ensures initial publish and periodic refresh).
-  - interval: ${ggs_status_interval}
-    then:
-      - if:
-          condition:
-            and:
-              - switch.is_on: ggs_connect_switch
-              - lambda: 'return id(ggs_client).connected();'
-              - api.connected:
-                  state_subscription_only: true
-          then:
-            - script.execute: ggs_pull_status
-
-globals:
-  - id: rx_buffer
-    type: std::string
-    restore_value: no
-    initial_value: '""'
-  - id: sf_published_once
-    type: bool
-    restore_value: no
-    initial_value: "false"
-  - id: sf_temp
-    type: float
-    restore_value: no
-    initial_value: "0.0"
-  - id: sf_humi
-    type: float
-    restore_value: no
-    initial_value: "0.0"
-  - id: sf_vpd
-    type: float
-    restore_value: no
-    initial_value: "0.0"
-  - id: sf_fan_level
-    type: int
-    restore_value: no
-    initial_value: "-1"
-  - id: sf_fan_on
-    type: int
-    restore_value: no
-    initial_value: "-1"
-  - id: sf_light_level
-    type: int
-    restore_value: no
-    initial_value: "-1"
-  - id: sf_light_on
-    type: int
-    restore_value: no
-    initial_value: "-1"
-  - id: sf_light2_level
-    type: int
-    restore_value: no
-    initial_value: "-1"
-  - id: sf_blower_level
-    type: int
-    restore_value: no
-    initial_value: "-1"
-  - id: sf_blower_on
-    type: int
-    restore_value: no
-    initial_value: "-1"
-  - id: sf_humidifier_level
-    type: int
-    restore_value: no
-    initial_value: "-1"
-  - id: sf_humidifier_on
-    type: int
-    restore_value: no
-    initial_value: "-1"
-  # 0 = dark schedule (force light 0). 1 = day/ramp (use parsed level).
-  - id: sf_is_day_env_target
-    type: int
-    restore_value: no
-    initial_value: "-1"
-
-sensor:
-  - platform: ble_client
-    type: characteristic
-    ble_client_id: ggs_client
-    id: ggs_stream
-    service_uuid: ${ggs_service_uuid}
-    characteristic_uuid: ${ggs_notify_char_uuid}
-    notify: true
-    update_interval: never
-    internal: true
-    lambda: |-
-      // Collect text payload from BLE fragments.
-      std::string chunk;
-      chunk.reserve(x.size());
-      for (auto b : x) {
-        if (b >= 32 && b <= 126) chunk.push_back(static_cast<char>(b));
-      }
-      if (chunk.empty()) return 0.0f;
-
-      // Each getDevSta notify starts a new JSON stream — do not concatenate cycles.
-      if (chunk.find("getDevSta") != std::string::npos) {
-        id(rx_buffer).clear();
-      }
-
-      // Capture previous values so we can publish-on-change.
-      const float prev_temp = id(sf_temp);
-      const float prev_humi = id(sf_humi);
-      const float prev_vpd = id(sf_vpd);
-      const int prev_fan_level = id(sf_fan_level);
-      const int prev_fan_on = id(sf_fan_on);
-      const int prev_light_level = id(sf_light_level);
-      const int prev_light_on = id(sf_light_on);
-      const int prev_light2_level = id(sf_light2_level);
-      const int prev_blower_level = id(sf_blower_level);
-      const int prev_blower_on = id(sf_blower_on);
-      const int prev_humidifier_level = id(sf_humidifier_level);
-      const int prev_humidifier_on = id(sf_humidifier_on);
-
-      id(rx_buffer) += chunk;
-
-      // Keep only trailing JSON-ish section.
-      auto json_start = id(rx_buffer).find('{');
-      if (json_start != std::string::npos && json_start > 0) {
-        id(rx_buffer).erase(0, json_start);
-      }
-      // Do not trim mid-frame (was dropping packet-1 sensor data before packet-2 arrived).
-      if (id(rx_buffer).size() > 4096) {
-        id(rx_buffer).clear();
-      }
-
-      // Extract a full {...} object after a JSON key (do not use the first '}' in the string).
-      auto json_object_after_key = [&](const std::string &hay, const char *key) -> std::string {
-        auto k = hay.find(key);
-        if (k == std::string::npos) return "";
-        auto colon = hay.find(':', k);
-        if (colon == std::string::npos) return "";
-        auto ob = hay.find('{', colon);
-        if (ob == std::string::npos) return "";
-        int depth = 0;
-        for (size_t i = ob; i < hay.size(); i++) {
-          if (hay[i] == '{') depth++;
-          else if (hay[i] == '}') {
-            depth--;
-            if (depth == 0) return hay.substr(ob, i - ob + 1);
-          }
-        }
-        return "";
-      };
-
-      auto slice_after_key = [&](const std::string &hay, const char *key) -> std::string {
-        auto k = hay.find(key);
-        if (k == std::string::npos) return "";
-        size_t slice_end = hay.size();
-        const char *stops[] = {"\"fan\"", "\"humidifier\"", "\"light2\"", "\"light\"", "\"sensor\"", "\"temp\""};
-        for (auto stop : stops) {
-          auto p = hay.find(stop, k + 8);
-          if (p != std::string::npos && p < slice_end) slice_end = p;
-        }
-        return hay.substr(k, slice_end - k);
-      };
-
-      // Scoped field lookup (cr0ssn0tice MQTT bridge): parent key then child within ~220 chars.
-      auto extract_scoped_int = [&](const std::string &hay, const char *parent_key, const char *field_key) -> int {
-        std::string parent = std::string("\"") + parent_key + "\":";
-        auto parent_pos = hay.find(parent);
-        if (parent_pos == std::string::npos) return -1;
-        size_t limit = parent_pos + 220;
-        if (limit > hay.size()) limit = hay.size();
-        std::string slice = hay.substr(parent_pos, limit - parent_pos);
-        std::string field = std::string("\"") + field_key + "\":";
-        auto field_pos = slice.find(field);
-        if (field_pos == std::string::npos) return -1;
-        auto colon = slice.find(':', field_pos);
-        if (colon == std::string::npos) return -1;
-        return atoi(slice.c_str() + colon + 1);
-      };
-
-      // Blower: second BLE fragment often starts with "wblower" (packet split ate "bo").
-      // Match substring "blower" only — never require a leading quote on the key.
-      auto apply_blower_from = [&](const std::string &hay) {
-        auto blower_pos = hay.find("blower");
-        if (blower_pos == std::string::npos) return;
-
-        size_t slice_end = hay.size();
-        auto fan_after = hay.find("\"fan\"", blower_pos);
-        if (fan_after != std::string::npos && fan_after < slice_end) slice_end = fan_after;
-        if (slice_end - blower_pos > 200) slice_end = blower_pos + 200;
-        std::string slice = hay.substr(blower_pos, slice_end - blower_pos);
-
-        auto field_int = [&](const char *field) -> int {
-          std::string key = std::string("\"") + field + "\":";
-          auto fp = slice.find(key);
-          if (fp == std::string::npos) return -1;
-          auto colon = slice.find(':', fp);
-          if (colon == std::string::npos) return -1;
-          return atoi(slice.c_str() + colon + 1);
-        };
-
-        int b_level = field_int("level");
-        int b_mode = field_int("modeType");
-        int b_on = field_int("on");
-
-        int pct = -1;
-        if (b_on == 0) {
-          pct = 0;
-        } else if (b_level >= 0 && b_level <= 100) {
-          pct = b_level;
-        } else if (b_mode >= 50 && b_mode <= 100) {
-          pct = b_mode;
-        } else if (b_level >= 0 && b_level <= 100) {
-          pct = b_level;
-        }
-        if (pct < 0) return;
-
-        id(sf_blower_level) = pct;
-        if (b_on == 0 || b_on == 1) {
-          id(sf_blower_on) = b_on;
-        } else {
-          id(sf_blower_on) = pct > 0 ? 1 : 0;
-        }
-      };
-
-      // Primary light: NOTIFY splits "level":0 -> "level":7!0} — digit before ! is garbage; !0} means 0.
-      auto apply_light_from = [&](const std::string &hay) {
-        auto l2k = hay.find("light2");
-        if (l2k == std::string::npos) return;
-
-        size_t lk = hay.rfind("\"light\":", l2k);
-        if (lk == std::string::npos) {
-          lk = hay.rfind("light\":", l2k);
-          if (lk != std::string::npos && lk > 0 && hay[lk - 1] == 'w') lk--;
-        }
-        if (lk == std::string::npos || lk >= l2k) return;
-
-        std::string region = hay.substr(lk, l2k - lk);
-        auto int_after_colon = [&](const char *start) -> int {
-          if (start == nullptr) return -1;
-          while (*start == ' ' || *start == '\t') start++;
-          while (*start != '\0' && (*start < '0' || *start > '9')) start++;
-          if (*start == '\0') return -1;
-          int v = atoi(start);
-          if (v >= 0 && v <= 100) return v;
-          return -1;
-        };
-
-        int lvl = -1;
-        // Dark-period split tail (capture: "level":7!0} is 0%, not 7%).
-        if (region.find("!0}") != std::string::npos) {
-          lvl = 0;
-        } else {
-          size_t pos = 0;
-          while (pos < region.size()) {
-            auto p = region.find("evel\":", pos);
-            if (p == std::string::npos) break;
-            int v = int_after_colon(region.c_str() + p + 6);
-            if (v >= 0) lvl = v;
-            pos = p + 6;
-          }
-          if (lvl < 0) {
-            auto lp = region.find("level\":");
-            if (lp != std::string::npos) {
-              size_t bang = region.find('!', lp);
-              if (bang == std::string::npos || bang > lp + 32) {
-                int v = int_after_colon(region.c_str() + lp + 8);
-                if (v >= 0) lvl = v;
-              }
-            }
-          }
-          if (lvl < 0) {
-            pos = 0;
-            while (pos < region.size()) {
-              auto el_pos = region.find("el\":", pos);
-              if (el_pos == std::string::npos) break;
-              char before = el_pos > 0 ? region[el_pos - 1] : '\0';
-              if (before == 'v' || before == 'l' || before == '%' || before == '(') {
-                int v = int_after_colon(region.c_str() + el_pos + 4);
-                if (v >= 0 && v <= 100) lvl = v;
-              }
-              pos = el_pos + 4;
-            }
-          }
-        }
-
-        if (lvl < 0 || lvl > 100) return;
-        if (id(sf_is_day_env_target) == 0) lvl = 0;
-        id(sf_light_level) = lvl;
-        id(sf_light_on) = lvl > 0 ? 1 : 0;
-      };
-
-      // Packet 1: sensor + light (no fan/}}). Packet 2: blower + fan + humidifier. Parse each as it arrives.
-      auto apply_sensor_from = [&](const std::string &hay) {
-        auto pos = hay.find("sensor");
-        if (pos == std::string::npos) return;
-        size_t end = hay.find("\"light\":", pos);
-        if (end == std::string::npos) end = hay.find("light\":", pos);
-        if (end == std::string::npos) end = pos + 180;
-        std::string slice = hay.substr(pos, end - pos);
-        auto ex = [&](const char *key, float &target) {
-          auto p = slice.find(key);
-          if (p == std::string::npos) return;
-          p = slice.find(':', p);
-          if (p == std::string::npos) return;
-          p++;
-          char *p_end = nullptr;
-          float v = strtof(slice.c_str() + p, &p_end);
-          if (p_end != slice.c_str() + p) target = v;
-        };
-        ex("\"temp\"", id(sf_temp));
-        ex("\"humi\"", id(sf_humi));
-        ex("\"vpd\"", id(sf_vpd));
-        auto ex_int = [&](const char *key, int &target) {
-          auto p = slice.find(key);
-          if (p == std::string::npos) return;
-          p = slice.find(':', p);
-          if (p == std::string::npos) return;
-          int v = atoi(slice.c_str() + p + 1);
-          if (v == 0 || v == 1) target = v;
-        };
-        ex_int("\"isDayEnvTarget\"", id(sf_is_day_env_target));
-      };
-
-      // Fan level: "level" after "fan" (packet 2), before humidifier. Substring "fan" like blower.
-      auto apply_fan_from = [&](const std::string &hay) {
-        auto bp = hay.find("blower");
-        size_t start = bp == std::string::npos ? 0 : bp;
-        auto fp = hay.find("fan", start);
-        if (fp == std::string::npos) return;
-        auto hp = hay.find("humidifier", fp);
-        size_t end = hp == std::string::npos ? fp + 120 : hp;
-        auto lvl_pos = hay.find("\"level\"", fp);
-        if (lvl_pos == std::string::npos || lvl_pos >= end) return;
-        auto colon = hay.find(':', lvl_pos);
-        if (colon == std::string::npos) return;
-        int lvl = atoi(hay.c_str() + colon + 1);
-        if (lvl < 0 || lvl > 10) return;
-        id(sf_fan_level) = lvl;
-        id(sf_fan_on) = lvl > 0 ? 1 : 0;
-        auto on_pos = hay.find("\"on\"", fp);
-        if (on_pos != std::string::npos && on_pos < end) {
-          auto on_colon = hay.find(':', on_pos);
-          if (on_colon != std::string::npos) {
-            int on = atoi(hay.c_str() + on_colon + 1);
-            if (on == 0 || on == 1) id(sf_fan_on) = on;
-          }
-        }
-      };
-
-      auto apply_humidifier_from = [&](const std::string &hay) {
-        auto pos = hay.find("humidifier");
-        if (pos == std::string::npos) return;
-        size_t end = hay.size();
-        if (end - pos > 120) end = pos + 120;
-        std::string slice = hay.substr(pos, end - pos);
-        auto field_int = [&](const char *field) -> int {
-          std::string fk = std::string("\"") + field + "\":";
-          auto fp = slice.find(fk);
-          if (fp == std::string::npos) return -1;
-          auto colon = slice.find(':', fp);
-          if (colon == std::string::npos) return -1;
-          return atoi(slice.c_str() + colon + 1);
-        };
-        int lvl = field_int("level");
-        if (lvl >= 0 && lvl <= 100) {
-          id(sf_humidifier_level) = lvl;
-          id(sf_humidifier_on) = lvl > 0 ? 1 : 0;
-        }
-      };
-
-      auto apply_light2_from = [&](const std::string &hay) {
-        auto pos = hay.find("light2");
-        if (pos == std::string::npos) return;
-        size_t end = hay.find("blower", pos);
-        if (end == std::string::npos) end = pos + 80;
-        std::string slice = hay.substr(pos, end - pos);
-        auto lvl_pos = slice.find("\"level\"");
-        if (lvl_pos == std::string::npos) return;
-        auto colon = slice.find(':', lvl_pos);
-        if (colon == std::string::npos) return;
-        int v = atoi(slice.c_str() + colon + 1);
-        if (v >= 0 && v <= 100) id(sf_light2_level) = v;
-      };
-
-      auto run_device_parsers = [&](const std::string &hay, bool complete) {
-        apply_sensor_from(hay);
-        if (complete) {
-          apply_light_from(hay);
-          apply_light2_from(hay);
-          apply_fan_from(hay);
-          apply_blower_from(hay);
-          apply_humidifier_from(hay);
-        }
-      };
-
-      const std::string &parse_hay = id(rx_buffer);
-      const bool buf_has_sensor = parse_hay.find("sensor") != std::string::npos;
-      const bool buf_has_fan = parse_hay.find("fan") != std::string::npos;
-      const bool buf_complete = buf_has_sensor && buf_has_fan && parse_hay.find("}}") != std::string::npos;
-
-      run_device_parsers(parse_hay, buf_complete);
-
-      const bool force = !id(sf_published_once);
-      auto publish_float = [&](float prev, float cur, sensor::Sensor *s) {
-        if (force || cur != prev) s->publish_state(cur);
-      };
-      auto publish_text_int = [&](int prev, int cur, text_sensor::TextSensor *s, bool add_percent) {
-        if (cur < 0) return;
-        if (!force && cur == prev) return;
-        if (add_percent) s->publish_state(to_string(cur) + "%");
-        else s->publish_state(to_string(cur));
-      };
-      auto publish_bin = [&](int prev, int cur, binary_sensor::BinarySensor *s) {
-        if (cur < 0) return;
-        if (!force && cur == prev) return;
-        s->publish_state(cur == 1);
-      };
-
-      auto publish_all = [&](bool include_devices) {
-        publish_float(prev_temp, id(sf_temp), id(sf_temp_sensor));
-        publish_float(prev_humi, id(sf_humi), id(sf_humi_sensor));
-        publish_float(prev_vpd, id(sf_vpd), id(sf_vpd_sensor));
-        if (include_devices) {
-          publish_text_int(prev_fan_level, id(sf_fan_level), id(sf_fan_level_text), false);
-          publish_text_int(prev_light_level, id(sf_light_level), id(sf_light_level_text), true);
-          publish_text_int(prev_light2_level, id(sf_light2_level), id(sf_light2_level_text), true);
-          publish_text_int(prev_blower_level, id(sf_blower_level), id(sf_blower_level_text), true);
-          publish_text_int(prev_humidifier_level, id(sf_humidifier_level), id(sf_humidifier_level_text), false);
-          publish_bin(prev_fan_on, id(sf_fan_on), id(sf_fan_bin));
-          publish_bin(prev_light_on, id(sf_light_on), id(sf_light_bin));
-          publish_bin(prev_blower_on, id(sf_blower_on), id(sf_blower_bin));
-          publish_bin(prev_humidifier_on, id(sf_humidifier_on), id(sf_humidifier_bin));
-        }
-        id(sf_published_once) = true;
-      };
-
-      publish_all(buf_complete);
-
-      if (buf_complete) {
-        id(rx_buffer).clear();
-      }
-      return 0.0f;
-
+  # Setting ending of zone 1 occupancy
   - platform: template
-    name: "Temperature"
-    id: sf_temp_sensor
-    device_class: temperature
-    state_class: measurement
-    unit_of_measurement: "°C"
+    name: "Radar End Zone 1"
+    id: radar_z1_end
+    device_class: distance
+    min_value: 0
+    max_value: 600
+    step: 1
+    mode: box
     update_interval: never
-    lambda: |-
-      return id(sf_temp);
+    optimistic: true
+    restore_value: true
+    initial_value: 100
+    icon: "mdi:arrow-collapse-right"
+    entity_category: CONFIG
 
+  # Setting ending of zone 2 occupancy
   - platform: template
-    name: "Humidity"
-    id: sf_humi_sensor
-    device_class: humidity
-    state_class: measurement
-    unit_of_measurement: "%"
+    name: "Radar End Zone 2"
+    id: radar_z2_end
+    device_class: distance
+    min_value: 0
+    max_value: 600
+    step: 1
+    mode: box
     update_interval: never
-    lambda: |-
-      return id(sf_humi);
+    optimistic: true
+    restore_value: true
+    initial_value: 200
+    icon: "mdi:arrow-collapse-right"
+    entity_category: CONFIG
 
+  # Setting ending of zone 3 occupancy
   - platform: template
-    name: "VPD"
-    id: sf_vpd_sensor
-    state_class: measurement
-    unit_of_measurement: "kPa"
-    accuracy_decimals: 2
+    name: "Radar End Zone 3"
+    id: radar_z3_end
+    device_class: distance
+    min_value: 0
+    max_value: 600
+    step: 1
+    mode: box
     update_interval: never
-    lambda: |-
-      return id(sf_vpd);
+    optimistic: true
+    restore_value: true
+    initial_value: 400
+    icon: "mdi:arrow-collapse-right"
+    entity_category: CONFIG
 
 binary_sensor:
+  - platform: ld2410
+    has_target:
+      name: Radar Target
+      id: radar_has_target
+    has_moving_target:
+      name: Radar Moving Target
+    has_still_target:
+      name: Radar Still Target
+  ## Set Up Radar Zones Based On Distance
   - platform: template
-    name: "Fan"
-    id: sf_fan_bin
-    device_class: running
-    icon: mdi:fan
+    name: "Radar Zone 1 Occupancy"
+    device_class: occupancy
+    icon: mdi:motion-sensor
     lambda: |-
-      if (id(sf_fan_on) < 0) {
-        return {};
+      if ((id(radar_has_target).state) && (id(radar_detection_distance).state < id(radar_z1_end).state)) {
+        return true;
+      } else {
+        return false;
       }
-      return id(sf_fan_on) == 1;
+  - platform: template
+    name: "Radar Zone 2 Occupancy"
+    device_class: occupancy
+    icon: mdi:motion-sensor
+    lambda: |-
+      if ((id(radar_has_target).state) && ((id(radar_z1_end).state < id(radar_detection_distance).state) && (id(radar_detection_distance).state < id(radar_z2_end).state))) {
+        return true;
+      } else {
+        return false;
+      }
+  - platform: template
+    name: "Radar Zone 3 Occupancy"
+    device_class: occupancy
+    icon: mdi:motion-sensor
+    lambda: |-
+      if ((id(radar_has_target).state) && ((id(radar_z2_end).state < id(radar_detection_distance).state) && (id(radar_detection_distance).state < id(radar_z3_end).state))) {
+        return true;
+      } else {
+        return false;
+      }
 
-  - platform: template
-    name: "Light"
-    id: sf_light_bin
-    icon: mdi:lightbulb
-    lambda: |-
-      if (id(sf_light_on) < 0) {
-        return {};
-      }
-      return id(sf_light_on) == 1;
-
-  - platform: template
-    name: "Blower"
-    id: sf_blower_bin
-    device_class: running
-    icon: mdi:weather-windy
-    lambda: |-
-      if (id(sf_blower_on) < 0) {
-        return {};
-      }
-      return id(sf_blower_on) == 1;
-
-  - platform: template
-    name: "Humidifier"
-    id: sf_humidifier_bin
-    icon: mdi:air-humidifier
-    lambda: |-
-      if (id(sf_humidifier_on) < 0) {
-        return {};
-      }
-      return id(sf_humidifier_on) == 1;
-
-text_sensor:
-  - platform: template
-    name: "Fan Level"
-    id: sf_fan_level_text
-    icon: mdi:fan-speed-1
-    update_interval: never
-    lambda: |-
-      if (id(sf_fan_level) < 0) {
-        return {};
-      }
-      return to_string(id(sf_fan_level));
-
-  - platform: template
-    name: "Light Level"
-    id: sf_light_level_text
-    icon: mdi:brightness-percent
-    update_interval: never
-    lambda: |-
-      if (id(sf_light_level) < 0) {
-        return {};
-      }
-      return to_string(id(sf_light_level)) + "%";
-
-  - platform: template
-    name: "Light 2 Level"
-    id: sf_light2_level_text
-    icon: mdi:brightness-percent
-    update_interval: never
-    lambda: |-
-      if (id(sf_light2_level) < 0) {
-        return {};
-      }
-      return to_string(id(sf_light2_level)) + "%";
-
-  - platform: template
-    name: "Blower Level"
-    id: sf_blower_level_text
-    icon: mdi:fan-chevron-up
-    update_interval: never
-    lambda: |-
-      if (id(sf_blower_level) < 0) {
-        return {};
-      }
-      return to_string(id(sf_blower_level)) + "%";
-
-  - platform: template
-    name: "Humidifier Level"
-    id: sf_humidifier_level_text
-    icon: mdi:water-percent
-    update_interval: never
-    lambda: |-
-      if (id(sf_humidifier_level) < 0) {
-        return {};
-      }
-      return to_string(id(sf_humidifier_level));
+sensor:
+  - platform: ld2410
+    moving_distance:
+      name: Radar Moving Distance
+      id: moving_distance
+    still_distance:
+      name: Radar Still Distance
+      id: still_distance
+    moving_energy:
+      name: Radar Move Energy
+    still_energy:
+      name: Radar Still Energy
+    detection_distance:
+      name: Radar Detection Distance
+      id: radar_detection_distance
+    g0:
+      move_energy:
+        name: g0 move energy
+      still_energy:
+        name: g0 still energy
+    g1:
+      move_energy:
+        name: g1 move energy
+      still_energy:
+        name: g1 still energy
+    g2:
+      move_energy:
+        name: g2 move energy
+      still_energy:
+        name: g2 still energy
+    g3:
+      move_energy:
+        name: g3 move energy
+      still_energy:
+        name: g3 still energy
+    g4:
+      move_energy:
+        name: g4 move energy
+      still_energy:
+        name: g4 still energy
+    g5:
+      move_energy:
+        name: g5 move energy
+      still_energy:
+        name: g5 still energy
+    g6:
+      move_energy:
+        name: g6 move energy
+      still_energy:
+        name: g6 still energy
+    g7:
+      move_energy:
+        name: g7 move energy
+      still_energy:
+        name: g7 still energy
+    g8:
+      move_energy:
+        name: g8 move energy
+      still_energy:
+        name: g8 still energy
 
 switch:
-  # Turn OFF to release GGS BLE for PC capture (tools/ggs_ble.py). Turn ON to resume monitoring.
-  - platform: ble_client
-    ble_client_id: ggs_client
-    id: ggs_connect_switch
-    name: "GGS Connect"
-    icon: mdi:bluetooth-connect
-    restore_mode: ALWAYS_ON
-  - platform: restart
-    name: "Reboot"
+  - platform: ld2410
+    engineering_mode:
+      name: "Engineering Mode"
+      restore_mode: RESTORE_DEFAULT_OFF
+    bluetooth:
+      name: "Control Bluetooth"
+      id: "LDBluetooth"
+      restore_mode: RESTORE_DEFAULT_OFF
 
-# Optional MQTT export.
-# Uncomment and set secrets if you still want MQTT beside Home Assistant native API.
-# mqtt:
-#   broker: !secret mqtt_broker
-#   username: !secret mqtt_username
-#   password: !secret mqtt_password
+  - platform: restart
+    name: "Reboot" 
+
+button:
+  - platform: factory_reset
+    name: Reset to Factory Settings
+    disabled_by_default: True
